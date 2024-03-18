@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "proj-alta"
+version = "0.1.0"
+description = "A simple movie recommendation mvp app"
+authors = ["Michael"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+django = "^5.0.3"
+djangorestframework = "^3.14.0"
+django-model-utils = "^4.4.0"
+django-environ = "^0.11.2"
+psycopg = {extras = ["binary", "pool"], version = "^3.1.18"}
+drf-spectacular = {extras = ["sidecar"], version = "^0.27.1"}
+argon2-cffi = "^23.1.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
