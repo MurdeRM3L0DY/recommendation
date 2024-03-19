@@ -2,6 +2,8 @@
 
 A simple movie recommendation mvp app
 
+At the risk of stating the obvious, this is a toy, *NOT PRODUCTION READY* software
+
 ## requirements
 - docker
 - make
