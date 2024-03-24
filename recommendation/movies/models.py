@@ -1,7 +1,5 @@
 from django.db import models
 
-# from recommendation.users.models import Profile
-
 class Movie(models.Model):
     class StreamingPlatforms:
         NETFLIX = 'netflix'

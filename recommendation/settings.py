@@ -44,7 +44,7 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'drf_spectacular_sidecar',
 
-    # 'recommendation.authentication',
+    'recommendation.authentication',
     'recommendation.users',
     'recommendation.movies',
     'recommendation.watchlist',

@@ -80,7 +80,7 @@ class MoviesViewSet(GenericViewSet):
                         if wl.watched == watched_bool:
                             recommended_movie = { "movie": movie, "watched": wl.watched == watched_bool}
                     else:
-                        if watched_bool == False:
+                        if watched_bool is False:
                             recommended_movie = { "movie": movie, "watched": False }
                 else:
                     recommended_movie = { "movie": movie, "watched": bool(wl and wl.watched) }

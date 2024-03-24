@@ -1,9 +1,8 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 
-from recommendation.watchlist.models import WatchList
+from recommendation.users.managers import UserManager
 
-from .managers import UserManager
 
 # # Create your models here.
 class User(AbstractUser):
@@ -18,23 +17,25 @@ class User(AbstractUser):
             (STAFF, "Staff"),
         )
 
-
     name = None
     first_name = None
     last_name = None
     username = None
     email = models.EmailField(unique=True)
-    type = models.CharField(max_length=10, default=USER_TYPE.USER, choices=USER_TYPE.CHOICES)
+    type = models.CharField(
+        max_length=10, default=USER_TYPE.USER, choices=USER_TYPE.CHOICES
+    )
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
 
     objects = UserManager()
 
+
 # # Create your models here.
 class Profile(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile", primary_key=True)
-    friends = models.ManyToManyField('self', blank=True, symmetrical=True)
-    watchlist = models.ManyToManyField(WatchList, blank=True, symmetrical=True)
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    friends = models.ManyToManyField("self", blank=True, symmetrical=True)
+    watchlist = models.ManyToManyField("movies.Movie", through="watchlist.WatchList")
     first_name = models.CharField(blank=True, max_length=255)
     last_name = models.CharField(blank=True, max_length=255)

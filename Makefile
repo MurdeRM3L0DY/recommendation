@@ -8,7 +8,7 @@ migrate:
 # 	docker compose exec api python manage.py createsuperuser
 
 loaddata:
-	docker compose run --user root --rm api python manage.py loaddata ./fixture.json
+	docker compose exec --user root api python manage.py loaddata ./fixture.json
 
 dumpdata:
 	docker compose run --user root --rm api python manage.py dumpdata -o fixture.json
@@ -18,3 +18,6 @@ up:
 
 down:
 	docker compose down
+
+db:
+	docker compose exec db psql -U postgres -d recommendation
