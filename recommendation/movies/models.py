@@ -13,3 +13,6 @@ class Movie(models.Model):
     title = models.CharField(max_length=255)
     release_date = models.DateField()
     streaming_platform = models.CharField(max_length=32, choices=StreamingPlatforms.CHOICES)
+
+    class Meta:
+        unique_together = ("title", "release_date")
