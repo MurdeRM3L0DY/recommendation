@@ -10,12 +10,17 @@ from rest_framework import status
 
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 
-from recommendation.movies.serializers import MoviesAuthGetSerializer, MoviesRequestSerializer, MoviesGetSerializer
+from recommendation.movies.serializers import (
+    MoviesAuthGetSerializer,
+    MoviesRequestSerializer,
+    MoviesGetSerializer,
+)
 from recommendation.movies.models import Movie
 from recommendation.users.models import Profile
 from recommendation.watchlist.models import WatchList
 
 User = get_user_model()
+
 
 # Create your views here.
 class MoviesViewSet(GenericViewSet):
@@ -44,7 +49,7 @@ class MoviesViewSet(GenericViewSet):
             ),
         ],
         # override default docstring extraction
-        description='',
+        description="",
         # provide Authentication class that deviates from the views default
         auth=None,
         # change the auto-generated operation name
@@ -56,6 +61,7 @@ class MoviesViewSet(GenericViewSet):
         queryset = self.queryset
         streaming_platform = request.query_params.get("streaming_platform")
 
+        # optionally filter by streaming_platform
         if streaming_platform:
             queryset = queryset.filter(streaming_platform=streaming_platform)
 
@@ -66,9 +72,11 @@ class MoviesViewSet(GenericViewSet):
             watched_bool_str = request.query_params.get("watched")
             watched_bool = False
             if watched_bool_str:
-                watched_bool = watched_bool_str.lower() in ['true', '1']
+                watched_bool = watched_bool_str.lower() in ["true", "1"]
 
-            user_profile = Profile.objects.get(user=request.user)
+            user_profile = Profile.objects.prefetch_related("friends").get(
+                user=request.user
+            )
 
             recommended_movies = []
 
@@ -77,42 +85,55 @@ class MoviesViewSet(GenericViewSet):
 
                 if watched_bool_str is not None:
                     if wl:
+                        # we only add to the recommended list if both watched bools match
                         if wl.watched == watched_bool:
-                            recommended_movie = { "movie": movie, "watched": wl.watched == watched_bool}
+                            recommended_movie = {
+                                "movie": movie,
+                                "watched": wl.watched,
+                            }
                     else:
+                        # `watched` is False and user watchlist is None =>
+                        # necessarily the movie isn't present in the user's watchlist
+                        #
+                        # if `watched` is True for istance, we ignore the movie
                         if watched_bool is False:
-                            recommended_movie = { "movie": movie, "watched": False }
+                            recommended_movie = {"movie": movie, "watched": False}
                 else:
-                    recommended_movie = { "movie": movie, "watched": bool(wl and wl.watched) }
+                    # user didn't filter by `watched`
+                    recommended_movie = {
+                        "movie": movie,
+                        "watched": bool(wl and wl.watched),
+                    }
 
                 if recommended_movie and recommended_movie not in recommended_movies:
                     recommended_movies.append(recommended_movie)
 
-
-            # push friends watchlist movies to the top of the list
+            # the recommendation algorithm simply prioritizes movies in friends' watchlist
             for friend in user_profile.friends.all():
-                friend_watchlist = friend.watchlist.all()
-
+                friend_watchlist = WatchList.objects.filter(profile=friend)
                 if streaming_platform:
-                    friend_watchlist = friend_watchlist.filter(movie__streaming_platform=streaming_platform)
+                    friend_watchlist = friend_watchlist.filter(
+                        movie__streaming_platform=streaming_platform
+                    )
 
                 for e in friend_watchlist:
-                    user_watchlist = user_profile.watchlist.filter(movie=e.movie).first()
+                    user_watchlist = WatchList.objects.filter(
+                        profile=user_profile, movie=e.movie
+                    ).first()
                     append_recommended_movies(e.movie, user_watchlist)
 
-
-            # push the rest
             for movie in queryset:
-                user_watchlist = user_profile.watchlist.filter(movie=movie).first()
+                user_watchlist = WatchList.objects.filter(
+                    profile=user_profile, movie=movie
+                ).first()
                 append_recommended_movies(movie, user_watchlist)
-
 
             serializer = MoviesAuthGetSerializer(recommended_movies, many=True)
             return Response(serializer.data, status.HTTP_200_OK)
 
     @extend_schema(
         # override default docstring extraction
-        description='',
+        description="",
         # provide Authentication class that deviates from the views default
         auth=None,
         # change the auto-generated operation name

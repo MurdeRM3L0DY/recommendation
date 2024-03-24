@@ -21,3 +21,6 @@ down:
 
 db:
 	docker compose exec db psql -U postgres -d recommendation
+
+api:
+	docker compose exec api bash
