@@ -9,13 +9,18 @@ At the risk of stating the obvious, this is a toy, *NOT PRODUCTION READY* softwa
 - make
 
 ## setup
--   ```bash
-    make loaddata # load the pregenerated data
-    make up # start docker services
-    ```
-
+- start docker services:
+```bash
+make up
+ ```
+- in another terminal:
+```bash
+make migrate # initialize database
+make loaddata # load the pregenerated data
+```
 - navigate to `localhost:8000/api/docs` to try out the APIs
 
--   ```bash
-    make down # stop docker services
-    ```
+- stop docker services
+```bash
+make down
+```
