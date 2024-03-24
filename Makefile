@@ -11,7 +11,7 @@ loaddata:
 	docker compose exec --user root api python manage.py loaddata ./fixture.json
 
 dumpdata:
-	docker compose run --user root --rm api python manage.py dumpdata -o fixture.json
+	docker compose exec --user root api python manage.py dumpdata -o fixture.json
 
 up:
 	docker compose up --build
