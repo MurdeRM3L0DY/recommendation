@@ -2,7 +2,7 @@
 
 from django.contrib.auth import get_user_model
 from drf_spectacular.types import OpenApiTypes
-from rest_framework.exceptions import APIException
+from rest_framework.exceptions import APIException, NotAuthenticated
 from rest_framework.viewsets import GenericViewSet
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -121,26 +121,27 @@ class MoviesViewSet(GenericViewSet):
         operation=None,
     )
     def create(self, request: Request):
-        serializer = MoviesRequestSerializer(data=request.data)
+        if request.user.is_authenticated:
+            serializer = MoviesRequestSerializer(data=request.data)
 
-        if serializer.is_valid():
-            data = serializer.validated_data
+            if serializer.is_valid():
+                data = serializer.validated_data
 
-            title = data.get('title')
-            release_date = data.get('release_date')
-            streaming_platform = data.get('streaming_platform')
+                title = data.get("title")
+                release_date = data.get("release_date")
+                streaming_platform = data.get("streaming_platform")
 
-            if Movie.objects.filter(title=title).exists():
-                raise APIException("movie already exists", status.HTTP_409_CONFLICT)
+                new_movie, created = self.queryset.get_or_create(
+                    title=title,
+                    release_date=release_date,
+                    streaming_platform=streaming_platform,
+                )
+                if not created:
+                    raise APIException("movie already exists", status.HTTP_409_CONFLICT)
 
-            new_movie = Movie.objects.create(
-                title=title,
-                release_date=release_date,
-                streaming_platform=streaming_platform
-            )
-            new_movie.save()
-
-            serializer = MoviesGetSerializer(new_movie)
-            return Response(serializer.data, status.HTTP_201_CREATED)
+                serializer = MoviesGetSerializer(new_movie)
+                return Response(serializer.data, status.HTTP_201_CREATED)
+            else:
+                return Response(serializer.errors, status.HTTP_400_BAD_REQUEST)
         else:
-            return Response(serializer.errors, status.HTTP_400_BAD_REQUEST)
+            raise NotAuthenticated()
