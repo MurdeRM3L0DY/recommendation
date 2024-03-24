@@ -36,6 +36,5 @@ class User(AbstractUser):
 class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     friends = models.ManyToManyField("self", blank=True, symmetrical=True)
-    watchlist = models.ManyToManyField("movies.Movie", through="watchlist.WatchList")
     first_name = models.CharField(blank=True, max_length=255)
     last_name = models.CharField(blank=True, max_length=255)
