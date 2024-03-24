@@ -4,6 +4,8 @@ from recommendation.watchlist.models import WatchList
 
 
 class WatchListSerializer(serializers.ModelSerializer):
+    movie = MoviesGetSerializer()
+
     class Meta:
         model = WatchList
         fields = "__all__"
@@ -19,7 +21,7 @@ class WatchListCreateSerializer(serializers.ModelSerializer):
         fields = ["movie"]
 
 class WatchedRetrieveSerializer(serializers.ModelSerializer):
-    movie = MoviesGetSerializer
+    movie = MoviesGetSerializer()
 
     class Meta:
         model = WatchList

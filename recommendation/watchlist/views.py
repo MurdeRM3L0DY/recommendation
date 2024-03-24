@@ -1,16 +1,21 @@
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
-from rest_framework.exceptions import APIException, NotAuthenticated
+from rest_framework.exceptions import APIException, NotAuthenticated, PermissionDenied
 from rest_framework.request import Request
 
 # from rest_framework.mixins import UpdateModelMixin, ListModelMixin, CreateModelMixin
 from rest_framework.viewsets import GenericViewSet
 from rest_framework.response import Response
-from recommendation.movies.models import Movie
 from recommendation.users.models import Profile
 
 from recommendation.watchlist.models import WatchList
-from recommendation.watchlist.serializers import WatchListCreateSerializer, WatchListRequestSerializer, WatchListSerializer, WatchedRetrieveSerializer
+from recommendation.watchlist.serializers import (
+    WatchListCreateSerializer,
+    WatchListRequestSerializer,
+    WatchListSerializer,
+    WatchedRetrieveSerializer,
+)
+
 
 class WatchListViewSet(GenericViewSet):
     queryset = WatchList.objects.all()
@@ -24,34 +29,37 @@ class WatchListViewSet(GenericViewSet):
 
         return super().get_serializer_class()
 
-
     def list(self, request: Request):
         if request.user.is_authenticated:
             curr_profile = Profile.objects.get(user=request.user)
-            serializer = WatchListSerializer(curr_profile.watchlist.all(), many=True)
+            serializer = WatchListSerializer(
+                self.queryset.filter(profile=curr_profile), many=True
+            )
             return Response(serializer.data, status.HTTP_200_OK)
         else:
             raise NotAuthenticated()
 
-    def create(self, request, *args, **kwargs):
+    def create(self, request):
         if request.user.is_authenticated:
             serializer = WatchListCreateSerializer(data=request.data)
 
             if serializer.is_valid():
                 data = serializer.validated_data
 
-                movie = data.get('movie')
+                movie = data.get("movie")
 
                 if movie:
                     curr_profile = Profile.objects.get(user=request.user)
 
-                    if curr_profile.watchlist.filter(movie=movie).exists():
-                        raise APIException("movie already added to watchlist", status.HTTP_400_BAD_REQUEST)
-
-                    new_watched = self.queryset.create(
+                    new_watched, created = self.queryset.get_or_create(
+                        profile=curr_profile,
                         movie=movie,
                     )
-                    curr_profile.watchlist.add(new_watched)
+                    if not created:
+                        raise APIException(
+                            "movie already added to watchlist",
+                            status.HTTP_400_BAD_REQUEST,
+                        )
 
                     serializer = WatchedRetrieveSerializer(new_watched)
                     return Response(serializer.data, status.HTTP_201_CREATED)
@@ -66,7 +74,7 @@ class WatchListViewSet(GenericViewSet):
     @extend_schema(
         request=WatchListRequestSerializer,
         # override default docstring extraction
-        description='',
+        description="",
         # provide Authentication class that deviates from the views default
         auth=None,
         # change the auto-generated operation name
@@ -81,20 +89,23 @@ class WatchListViewSet(GenericViewSet):
             if serializer.is_valid():
                 data = serializer.validated_data
 
-                curr_profile = Profile.objects.get(user=request.user)
-
-                watched = curr_profile.watchlist.filter(movie__id=pk).first()
-
+                watched = self.queryset.get(id=pk)
                 if not watched:
-                    raise APIException("watch list entry not found", status.HTTP_400_BAD_REQUEST)
+                    raise APIException(
+                        "watch list entry not found", status.HTTP_400_BAD_REQUEST
+                    )
+
+                curr_profile = Profile.objects.get(user=request.user)
+                if watched.profile != curr_profile:
+                    raise PermissionDenied()
 
                 watched.watched = data.get("watched")
-                watched.save(update_fields=['watched'])
+                watched.save(update_fields=["watched"])
 
-                serializer = WatchListSerializer(watched)
+                serializer = WatchedRetrieveSerializer(watched)
                 return Response(serializer.data, status.HTTP_200_OK)
             else:
                 return Response(serializer.errors, status.HTTP_400_BAD_REQUEST)
 
         else:
-            return Response("Unauthorized", status.HTTP_401_UNAUTHORIZED)
+            return NotAuthenticated()
