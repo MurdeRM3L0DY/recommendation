@@ -16,7 +16,6 @@ from recommendation.movies.serializers import (
     MoviesGetSerializer,
 )
 from recommendation.movies.models import Movie
-from recommendation.users.models import Profile
 from recommendation.watchlist.models import WatchList
 
 User = get_user_model()
@@ -57,6 +56,11 @@ class MoviesViewSet(GenericViewSet):
         # or even completely override what AutoSchema would generate. Provide raw Open API spec as Dict.
         operation=None,
     )
+    # FIXME: optimize queries
+    #
+    # - get all friend ids
+    # - filter watchlist using the ids, selecting only `movie`
+    # - theta join with auth user watchlist
     def list(self, request: Request):
         queryset = self.queryset
         streaming_platform = request.query_params.get("streaming_platform")
@@ -73,10 +77,6 @@ class MoviesViewSet(GenericViewSet):
             watched_bool = False
             if watched_bool_str:
                 watched_bool = watched_bool_str.lower() in ["true", "1"]
-
-            user_profile = Profile.objects.prefetch_related("friends").get(
-                user=request.user
-            )
 
             recommended_movies = []
 
@@ -109,8 +109,8 @@ class MoviesViewSet(GenericViewSet):
                     recommended_movies.append(recommended_movie)
 
             # the recommendation algorithm simply prioritizes movies in friends' watchlist
-            for friend in user_profile.friends.all():
-                friend_watchlist = WatchList.objects.filter(profile=friend)
+            for friend in request.user.friends.all():
+                friend_watchlist = WatchList.objects.filter(user=friend)
                 if streaming_platform:
                     friend_watchlist = friend_watchlist.filter(
                         movie__streaming_platform=streaming_platform
@@ -118,13 +118,13 @@ class MoviesViewSet(GenericViewSet):
 
                 for e in friend_watchlist:
                     user_watchlist = WatchList.objects.filter(
-                        profile=user_profile, movie=e.movie
+                        user=request.user, movie=e.movie
                     ).first()
                     append_recommended_movies(e.movie, user_watchlist)
 
             for movie in queryset:
                 user_watchlist = WatchList.objects.filter(
-                    profile=user_profile, movie=movie
+                    user=request.user, movie=movie
                 ).first()
                 append_recommended_movies(movie, user_watchlist)
 

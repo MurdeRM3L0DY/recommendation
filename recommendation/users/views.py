@@ -11,26 +11,30 @@ from rest_framework import status
 
 from drf_spectacular.utils import extend_schema
 
-from recommendation.users.models import Profile
-from recommendation.users.serializers import ProfilePkSerializer, ProfilePostSerializer, ProfileRetrieveSerializer
+from recommendation.users.serializers import (
+    UsersPkSerializer,
+    UsersPostSerializer,
+    UsersRetrieveSerializer,
+)
 
 User = get_user_model()
+
 
 class UsersViewSet(GenericViewSet):
     queryset = User.objects.all()
 
     def get_serializer_class(self):
         if self.action == "create":
-            return ProfilePostSerializer
+            return UsersPostSerializer
 
         if self.action == "add_friend":
-            return ProfilePkSerializer
+            return UsersPkSerializer
 
         return super().get_serializer_class()
 
     @extend_schema(
         # override default docstring extraction
-        description='',
+        description="",
         # provide Authentication class that deviates from the views default
         auth=None,
         # change the auto-generated operation name
@@ -39,33 +43,35 @@ class UsersViewSet(GenericViewSet):
         operation=None,
     )
     def create(self, request: Request, *args, **kwargs):
-        serializer = ProfilePostSerializer(data=request.data)
+        serializer = UsersPostSerializer(data=request.data)
 
         if serializer.is_valid():
             data = serializer.validated_data
 
-            user = data.get('user')
-            first_name = data.get('first_name')
-            last_name = data.get('first_name')
+            first_name = data.get("first_name")
+            last_name = data.get("last_name")
+            email = data.get("email")
+            password = data.get("password")
 
-            if self.queryset.filter(email=user.get('email')).exists():
+            if self.queryset.filter(email=email).exists():
                 raise APIException("user already exists", status.HTTP_409_CONFLICT)
 
-            new_profile = Profile.objects.create(
+            new_user = self.queryset.create_user(
                 first_name=first_name,
                 last_name=last_name,
-                user = User.objects.create_user(**user)
+                email=email,
+                password=password,
             )
-            new_profile.save()
+            new_user.save()
 
-            serializer = ProfileRetrieveSerializer(new_profile)
+            serializer = UsersRetrieveSerializer(new_user)
             return Response(serializer.data, status.HTTP_201_CREATED)
         else:
             return Response(serializer.errors, status.HTTP_400_BAD_REQUEST)
 
     @extend_schema(
         # override default docstring extraction
-        description='',
+        description="",
         # provide Authentication class that deviates from the views default
         auth=None,
         # change the auto-generated operation name
@@ -74,13 +80,13 @@ class UsersViewSet(GenericViewSet):
         operation=None,
     )
     def list(self, request: Request):
-        serializer = ProfileRetrieveSerializer(Profile.objects.all(), many=True)
+        serializer = UsersRetrieveSerializer(self.queryset, many=True)
         return Response(serializer.data, status.HTTP_200_OK)
 
-    @action(detail=False, methods=['POST'], url_path="add-friend")
+    @action(detail=False, methods=["POST"], url_path="add-friend")
     @extend_schema(
         # override default docstring extraction
-        description='',
+        description="",
         # provide Authentication class that deviates from the views default
         auth=None,
         # change the auto-generated operation name
@@ -90,23 +96,21 @@ class UsersViewSet(GenericViewSet):
     )
     def add_friend(self, request: Request):
         if request.user.is_authenticated:
-            serializer = ProfilePkSerializer(data=request.data)
+            serializer = UsersPkSerializer(data=request.data)
 
             if serializer.is_valid():
                 data = serializer.validated_data
 
-                curr_profile = Profile.objects.get(user=request.user)
-                friend_profile = Profile.objects.get(user=data.get("user"))
-
-                if curr_profile == friend_profile:
+                friend = data.get("user")
+                if request.user == friend:
                     raise APIException("can't add self to friend's list")
 
-                if curr_profile.friends.filter(user=data.get("user")).exists():
+                if request.user.friends.filter(id=friend.id).exists():
                     raise APIException("user is already in friendlist")
 
-                curr_profile.friends.add(friend_profile)
+                request.user.friends.add(friend)
 
-                serializer = ProfileRetrieveSerializer(friend_profile)
+                serializer = UsersRetrieveSerializer(friend)
                 return Response(serializer.data, status.HTTP_201_CREATED)
             else:
                 return Response(serializer.errors, status.HTTP_400_BAD_REQUEST)

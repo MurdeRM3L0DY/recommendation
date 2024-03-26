@@ -1,6 +1,5 @@
 from django.contrib.auth import authenticate, get_user_model, login, logout
-from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiParameter, extend_schema
+from drf_spectacular.utils import extend_schema
 
 from rest_framework import status
 from rest_framework.decorators import action
@@ -8,25 +7,26 @@ from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.serializers import Serializer
 from rest_framework.viewsets import GenericViewSet
 from rest_framework.response import Response
+from recommendation.authentication.serializers import AuthPostSerializer
 
-from recommendation.users.serializers import UsersPostSerializer, UsersRetrieveSerializer
+from recommendation.users.serializers import UsersRetrieveSerializer
 
 User = get_user_model()
+
 
 class AuthViewSet(GenericViewSet):
     queryset = User.objects.all()
 
     def get_serializer_class(self):
         if self.action == "login":
-            return UsersPostSerializer
+            return AuthPostSerializer
 
-        return Serializer
+        return super().get_serializer_class()
 
-    @action(detail=False, methods=['POST'], url_path='login')
+    @action(detail=False, methods=["POST"], url_path="login")
     @extend_schema(
-        request=UsersPostSerializer,
         # override default docstring extraction
-        description='',
+        description="",
         # provide Authentication class that deviates from the views default
         auth=None,
         # change the auto-generated operation name
@@ -35,15 +35,13 @@ class AuthViewSet(GenericViewSet):
         operation=None,
     )
     def login(self, request):
-        serializer = UsersPostSerializer(data=request.data)
-
-        print("ffs goddamnit: ", request.headers)
+        serializer = AuthPostSerializer(data=request.data)
 
         if serializer.is_valid():
             data = serializer.validated_data
 
-            email = data.get('email')
-            password = data.get('password')
+            email = data.get("email")
+            password = data.get("password")
 
             user = authenticate(request, email=email, password=password)
 
@@ -58,7 +56,7 @@ class AuthViewSet(GenericViewSet):
         else:
             return Response(serializer.errors, status.HTTP_400_BAD_REQUEST)
 
-    @action(detail=False, methods=['POST'], url_path='logout')
+    @action(detail=False, methods=["POST"], url_path="logout")
     def logout(self, request):
         logout(request)
 

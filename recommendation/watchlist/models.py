@@ -3,11 +3,9 @@ from django.db import models
 
 # Create your models here.
 class WatchList(models.Model):
-    profile = models.ForeignKey(
-        "users.Profile", on_delete=models.CASCADE, related_name="user_profile"
-    )
+    user = models.ForeignKey("users.User", on_delete=models.CASCADE)
     movie = models.ForeignKey("movies.Movie", on_delete=models.CASCADE)
     watched = models.BooleanField(default=False)
 
     class Meta:
-        unique_together = ("profile", "movie")
+        unique_together = ("user", "movie")

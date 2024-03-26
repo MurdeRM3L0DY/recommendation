@@ -1,3 +1,4 @@
+from django.contrib.auth import get_user_model
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.exceptions import APIException, NotAuthenticated, PermissionDenied
@@ -6,7 +7,6 @@ from rest_framework.request import Request
 # from rest_framework.mixins import UpdateModelMixin, ListModelMixin, CreateModelMixin
 from rest_framework.viewsets import GenericViewSet
 from rest_framework.response import Response
-from recommendation.users.models import Profile
 
 from recommendation.watchlist.models import WatchList
 from recommendation.watchlist.serializers import (
@@ -16,11 +16,16 @@ from recommendation.watchlist.serializers import (
     WatchedRetrieveSerializer,
 )
 
+User = get_user_model()
+
 
 class WatchListViewSet(GenericViewSet):
     queryset = WatchList.objects.all()
 
     def get_serializer_class(self):
+        if self.action == "list":
+            return WatchListSerializer
+
         if self.action == "create":
             return WatchListCreateSerializer
 
@@ -31,9 +36,8 @@ class WatchListViewSet(GenericViewSet):
 
     def list(self, request: Request):
         if request.user.is_authenticated:
-            curr_profile = Profile.objects.get(user=request.user)
             serializer = WatchListSerializer(
-                self.queryset.filter(profile=curr_profile), many=True
+                self.queryset.filter(user=request.user), many=True
             )
             return Response(serializer.data, status.HTTP_200_OK)
         else:
@@ -47,24 +51,21 @@ class WatchListViewSet(GenericViewSet):
                 data = serializer.validated_data
 
                 movie = data.get("movie")
-
-                if movie:
-                    curr_profile = Profile.objects.get(user=request.user)
-
-                    new_watched, created = self.queryset.get_or_create(
-                        profile=curr_profile,
-                        movie=movie,
-                    )
-                    if not created:
-                        raise APIException(
-                            "movie already added to watchlist",
-                            status.HTTP_400_BAD_REQUEST,
-                        )
-
-                    serializer = WatchedRetrieveSerializer(new_watched)
-                    return Response(serializer.data, status.HTTP_201_CREATED)
-                else:
+                if not movie:
                     raise APIException("invalid movie_id", status.HTTP_400_BAD_REQUEST)
+
+                new_watched, created = self.queryset.get_or_create(
+                    user=request.user,
+                    movie=movie,
+                )
+                if not created:
+                    raise APIException(
+                        "movie already added to watchlist",
+                        status.HTTP_400_BAD_REQUEST,
+                    )
+
+                serializer = WatchedRetrieveSerializer(new_watched)
+                return Response(serializer.data, status.HTTP_201_CREATED)
 
             else:
                 return Response(serializer.errors, status.HTTP_400_BAD_REQUEST)
@@ -72,7 +73,6 @@ class WatchListViewSet(GenericViewSet):
             raise NotAuthenticated()
 
     @extend_schema(
-        request=WatchListRequestSerializer,
         # override default docstring extraction
         description="",
         # provide Authentication class that deviates from the views default
@@ -89,14 +89,13 @@ class WatchListViewSet(GenericViewSet):
             if serializer.is_valid():
                 data = serializer.validated_data
 
-                watched = self.queryset.get(id=pk)
+                watched = self.queryset.filter(id=pk).first()
                 if not watched:
                     raise APIException(
                         "watch list entry not found", status.HTTP_400_BAD_REQUEST
                     )
 
-                curr_profile = Profile.objects.get(user=request.user)
-                if watched.profile != curr_profile:
+                if watched.user != request.user:
                     raise PermissionDenied()
 
                 watched.watched = data.get("watched")
