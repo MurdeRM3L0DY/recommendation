@@ -1,14 +1,15 @@
 # FIXME: Use a Serializer wherever possible
 
 from django.contrib.auth import get_user_model
+
 from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema, OpenApiParameter
+
 from rest_framework.exceptions import APIException, NotAuthenticated
 from rest_framework.viewsets import GenericViewSet
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework import status
-
-from drf_spectacular.utils import extend_schema, OpenApiParameter
 
 from recommendation.movies.serializers import (
     MoviesAuthGetSerializer,
@@ -56,11 +57,6 @@ class MoviesViewSet(GenericViewSet):
         # or even completely override what AutoSchema would generate. Provide raw Open API spec as Dict.
         operation=None,
     )
-    # FIXME: optimize queries
-    #
-    # - get all friend ids
-    # - filter watchlist using the ids, selecting only `movie`
-    # - theta join with auth user watchlist
     def list(self, request: Request):
         queryset = self.queryset
         streaming_platform = request.query_params.get("streaming_platform")
@@ -73,60 +69,58 @@ class MoviesViewSet(GenericViewSet):
             serializer = MoviesGetSerializer(queryset, many=True)
             return Response(serializer.data, status.HTTP_200_OK)
         else:
+            recommended_movies = []
+
+            # parse `watched` query param
             watched_bool_str = request.query_params.get("watched")
             watched_bool = False
             if watched_bool_str:
                 watched_bool = watched_bool_str.lower() in ["true", "1"]
 
-            recommended_movies = []
+            user_watchlist = WatchList.objects.filter(user=request.user)
+            friends_watchlist = WatchList.objects.exclude(
+                user=request.user, movie__in=user_watchlist.values("movie")
+            )
+            if streaming_platform:
+                user_watchlist = user_watchlist.filter(
+                    movie__streaming_platform=streaming_platform
+                )
+                friends_watchlist = friends_watchlist.filter(
+                    movie__streaming_platform=streaming_platform
+                )
 
-            def append_recommended_movies(movie: Movie, wl: WatchList):
-                recommended_movie = None
+            # ALL movie ids NOT IN user and friends watchlist
+            #
+            # this has to be calculated before filtering user_watchlist
+            # on the `watched` query param
+            #
+            # rest_movie_ids = queryset.values("id").difference(
+            #     user_watchlist.values("movie"), friends_watchlist.values("movie")
+            # )
+            rest_movie_ids = (
+                queryset.values("id")
+                .exclude(
+                    id__in=user_watchlist.values("movie"),
+                )
+                .exclude(id__in=friends_watchlist.values("movie"))
+            )
 
-                if watched_bool_str is not None:
-                    if wl:
-                        # we only add to the recommended list if both watched bools match
-                        if wl.watched == watched_bool:
-                            recommended_movie = {
-                                "movie": movie,
-                                "watched": wl.watched,
-                            }
-                    else:
-                        # `watched` is False and user watchlist is None =>
-                        # necessarily the movie isn't present in the user's watchlist
-                        #
-                        # if `watched` is True for istance, we ignore the movie
-                        if watched_bool is False:
-                            recommended_movie = {"movie": movie, "watched": False}
-                else:
-                    # user didn't filter by `watched`
-                    recommended_movie = {
-                        "movie": movie,
-                        "watched": bool(wl and wl.watched),
-                    }
+            if watched_bool_str:
+                user_watchlist = user_watchlist.filter(watched=watched_bool)
 
-                if recommended_movie and recommended_movie not in recommended_movies:
-                    recommended_movies.append(recommended_movie)
+            # movies in friends watchlist
+            for wl in friends_watchlist:
+                if (watched_bool_str and not watched_bool) or not watched_bool_str:
+                    recommended_movies.append({"movie": wl.movie, "watched": False})
 
-            # the recommendation algorithm simply prioritizes movies in friends' watchlist
-            for friend in request.user.friends.all():
-                friend_watchlist = WatchList.objects.filter(user=friend)
-                if streaming_platform:
-                    friend_watchlist = friend_watchlist.filter(
-                        movie__streaming_platform=streaming_platform
-                    )
+            # movies not in user watchlist
+            for movie in queryset.filter(id__in=rest_movie_ids):
+                if (watched_bool_str and not watched_bool) or not watched_bool_str:
+                    recommended_movies.append({"movie": movie, "watched": False})
 
-                for e in friend_watchlist:
-                    user_watchlist = WatchList.objects.filter(
-                        user=request.user, movie=e.movie
-                    ).first()
-                    append_recommended_movies(e.movie, user_watchlist)
-
-            for movie in queryset:
-                user_watchlist = WatchList.objects.filter(
-                    user=request.user, movie=movie
-                ).first()
-                append_recommended_movies(movie, user_watchlist)
+            # finally, movies in user watchlist
+            for e in user_watchlist:
+                recommended_movies.append({"movie": e.movie, "watched": e.watched})
 
             serializer = MoviesAuthGetSerializer(recommended_movies, many=True)
             return Response(serializer.data, status.HTTP_200_OK)
