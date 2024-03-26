@@ -78,9 +78,9 @@ class MoviesViewSet(GenericViewSet):
                 watched_bool = watched_bool_str.lower() in ["true", "1"]
 
             user_watchlist = WatchList.objects.filter(user=request.user)
-            friends_watchlist = WatchList.objects.exclude(
-                user=request.user, movie__in=user_watchlist.values("movie")
-            )
+            friends_watchlist = WatchList.objects.filter(
+                user__in=request.user.friends.all()
+            ).exclude(movie__in=user_watchlist.values("movie"))
             if streaming_platform:
                 user_watchlist = user_watchlist.filter(
                     movie__streaming_platform=streaming_platform
@@ -119,8 +119,8 @@ class MoviesViewSet(GenericViewSet):
                     recommended_movies.append({"movie": movie, "watched": False})
 
             # finally, movies in user watchlist
-            for e in user_watchlist:
-                recommended_movies.append({"movie": e.movie, "watched": e.watched})
+            for wl in user_watchlist:
+                recommended_movies.append({"movie": wl.movie, "watched": wl.watched})
 
             serializer = MoviesAuthGetSerializer(recommended_movies, many=True)
             return Response(serializer.data, status.HTTP_200_OK)
