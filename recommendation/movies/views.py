@@ -1,6 +1,7 @@
 # FIXME: Use a Serializer wherever possible
 
 from django.contrib.auth import get_user_model
+from django.db.models import Q, Value
 
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, OpenApiParameter
@@ -58,15 +59,15 @@ class MoviesViewSet(GenericViewSet):
         operation=None,
     )
     def list(self, request: Request):
-        queryset = self.queryset
+        movies = self.queryset
         streaming_platform = request.query_params.get("streaming_platform")
 
         # optionally filter by streaming_platform
         if streaming_platform:
-            queryset = queryset.filter(streaming_platform=streaming_platform)
+            movies = movies.filter(streaming_platform=streaming_platform)
 
         if not request.user.is_authenticated:
-            serializer = MoviesGetSerializer(queryset, many=True)
+            serializer = MoviesGetSerializer(movies, many=True)
             return Response(serializer.data, status.HTTP_200_OK)
         else:
             recommended_movies = []
@@ -79,8 +80,9 @@ class MoviesViewSet(GenericViewSet):
 
             user_watchlist = WatchList.objects.filter(user=request.user)
             friends_watchlist = WatchList.objects.filter(
-                user__in=request.user.friends.all()
-            ).exclude(movie__in=user_watchlist.values("movie"))
+                Q(user__in=request.user.friends.all())
+                & ~Q(movie__in=user_watchlist.values("movie"))
+            )
             if streaming_platform:
                 user_watchlist = user_watchlist.filter(
                     movie__streaming_platform=streaming_platform
@@ -97,26 +99,23 @@ class MoviesViewSet(GenericViewSet):
             # rest_movie_ids = queryset.values("id").difference(
             #     user_watchlist.values("movie"), friends_watchlist.values("movie")
             # )
-            rest_movie_ids = (
-                queryset.values("id")
-                .exclude(
-                    id__in=user_watchlist.values("movie"),
-                )
-                .exclude(id__in=friends_watchlist.values("movie"))
+            rest_movie_ids = movies.values("id").exclude(
+                id__in=user_watchlist.values("movie")
+                | friends_watchlist.values("movie"),
             )
+
+            friends_movies = movies.filter(
+                id__in=friends_watchlist.values("movie")
+            ).annotate(prio=Value(1))
+            rest_movies = movies.filter(id__in=rest_movie_ids).annotate(prio=Value(2))
+
+            # movies not in user watchlist
+            for movie in (friends_movies | rest_movies).order_by("prio"):
+                if (watched_bool_str and not watched_bool) or not watched_bool_str:
+                    recommended_movies.append({"movie": movie, "watched": False})
 
             if watched_bool_str:
                 user_watchlist = user_watchlist.filter(watched=watched_bool)
-
-            # movies in friends watchlist
-            for wl in friends_watchlist:
-                if (watched_bool_str and not watched_bool) or not watched_bool_str:
-                    recommended_movies.append({"movie": wl.movie, "watched": False})
-
-            # movies not in user watchlist
-            for movie in queryset.filter(id__in=rest_movie_ids):
-                if (watched_bool_str and not watched_bool) or not watched_bool_str:
-                    recommended_movies.append({"movie": movie, "watched": False})
 
             # finally, movies in user watchlist
             for wl in user_watchlist:
